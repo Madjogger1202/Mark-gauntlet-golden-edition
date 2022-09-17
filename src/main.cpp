@@ -129,8 +129,8 @@ struct telemetry              //
 {                             //
   uint8_t id=6;               //
   unsigned long time;         //
-  uint16_t mode;               //
-  uint16_t channel;            //  
+  uint16_t mode;              //
+  uint16_t channel;           //  
   uint16_t joy_x;             //
   uint16_t joy_y;             //
   int16_t enc;                //
@@ -150,6 +150,8 @@ volatile int encCounter;                          //
 volatile boolean encflag, encresetFlag;           //
 volatile byte enccurState, encprevState;          //
 ////////////////////////////////////////////////////
+
+bool music_is_on =0;
 
 //////////////////////////////
 void sendNrf();             //
@@ -211,7 +213,7 @@ void setup()
   attachInterrupt(7, encTick, CHANGE);
 
   Serial.begin(COMMUNICATION_BAUDRATE);
-  
+  Serial1.begin(115200);
   //////////////////////////////////////////////////////// LoRa config
   LoRa.setPins(LORA_NSS, LORA_RST, LORA_DIO0);          // 
   if (!LoRa.begin(LORA_FR))                             // 
@@ -249,9 +251,14 @@ void setup()
   }
 
   strip.setBrightness(30);
-  strip.fill(RED);
+  strip.fill(mHSV(116, 250, 252));
   strip.show();
-  
+  mp3Serial.begin(9600);
+  mp3_set_serial (mp3Serial);    
+  mp3_set_volume (30);
+  mp3_play(1);
+  delay(1400);
+ // mp3_pause();
 
 }
 
@@ -264,7 +271,47 @@ void loop()
   getEncData();
   readAcs();
   readMag();
-  dispLed(RED);
+  strip.fill(mHSV(116, 250, 252));
+  strip.show();
+  /*
+      Data transfer to raspberry pi pico
+      1: mode
+      2: channel
+      3:joy x
+      4:joy y
+      5:enc
+      6:buttons
+      7:acs x
+      8:acs y
+      9:acs z
+      a:mag x
+      b:mag y
+      c:mag z
+
+
+
+
+  */
+  Serial1.println("1"+String(radioData.mode));
+  Serial1.println("2"+String(radioData.channel));
+
+  Serial1.println("3"+String(radioData.joy_x));
+  Serial1.println("4"+String(radioData.joy_y));
+  
+  Serial1.println("5"+String(radioData.enc));
+  
+  Serial1.println("6"+String(radioData.buttons));
+
+  Serial1.println("7"+String(radioData.acs_z));
+  Serial1.println("8"+String(radioData.acs_x));
+  Serial1.println("9"+String(radioData.acs_y));
+
+  Serial1.println("a"+String(radioData.mag_x));
+  Serial1.println("b"+String(radioData.mag_y));
+  Serial1.println("c"+String(radioData.mag_z));
+  
+
+  
   u8g.firstPage();
   do
   {
@@ -274,6 +321,8 @@ void loop()
   {
   case 0:
     mode1();
+    if(music_is_on)
+      mp3_pause();
     break;
   case 1:
     mode2();
@@ -301,6 +350,11 @@ void loop()
     break;
   case 9: 
     mode10();
+    if(!music_is_on)
+    {
+        mp3_play(2);
+        music_is_on=1;
+    }
     break;
   }
 
@@ -440,6 +494,20 @@ void readMag()
 
 void dispInfoOled()        
 {
+  Wire.beginTransmission(0x08); 
+  Wire.write(radioData.mode);
+  Wire.write(radioData.channel);
+  Wire.write(radioData.joy_x);
+  Wire.write(radioData.joy_y);
+  Wire.write(radioData.enc);
+  Wire.write(radioData.buttons);
+  Wire.write(radioData.acs_x);
+  Wire.write(radioData.acs_y);
+  Wire.write(radioData.acs_z);
+  Wire.write(radioData.mag_x);
+  Wire.write(radioData.mag_y);
+  Wire.write(radioData.mag_z);
+  Wire.endTransmission();
   u8g.setFont(u8g_font_unifont);
   u8g.setPrintPos(2, 10); 
   u8g.print(radioData.mode);
@@ -469,11 +537,6 @@ void dispInfoOled()
   
 }
 
-void dispLed(uint32_t clr)             
-{
-  strip.fill(clr);
-  strip.show();
-}
 
 void mode1()  // simple radio transmitting
 {
@@ -482,7 +545,7 @@ void mode1()  // simple radio transmitting
 
 void mode2()
 {
-
+  sendLoRa(radioData.channel); 
 }
 
 void mode3()
